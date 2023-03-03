@@ -4,7 +4,7 @@ from casadi import *
 ###########################################################################################################################
 #placeholder code for path, taking path as a circle
 r = 20
-k = r
+curv = r
 path = []
 for theta in range(360):
     path.append([r*np.cos(theta*np.pi/180) - r, r*np.sin(theta*np.pi/180)])
@@ -24,26 +24,27 @@ def normal_vec(theta):
 
 def pos_in_path(theta):
     return [r*np.cos(theta*np.pi/180) - r, r*np.sin(theta*np.pi/180)]
+
 #################################################################################################################################
 #class for converting numerical path functions to casadi symbols
 class path_operations:
-    def get_tangent(theta_):
+    def get_tangent(self, s):
         tangent = SX.sym('tangent', 2)
-        tangent_ = tangent_vec(theta_)
+        tangent_ = tangent_vec(s)
         for i in range(2):
             tangent[i] = tangent_[i]
         return tangent
 
-    def get_normal(self, theta_):
+    def get_normal(self, s):
         normal = SX.sym('normal', 2)
-        normal_ = normal_vec(theta_)
+        normal_ = normal_vec(s)
         for i in range(2):
             normal[i] = normal_[i]
         return normal
 
-    def pos_in_path_(self, theta_):
+    def pos_in_path_(self, s):
         pos = SX.sym('pos', 2)
-        pos_ = pos_in_path(theta_)
+        pos_ = pos_in_path(s)
         for i in range(2):
             pos[i] = pos_[i]
         return pos
@@ -56,25 +57,27 @@ class player:
         self.U = np.zeros([n_controls, N])
         self.P = np.zeros([n_states, 1])
         self.X = np.zeros([n_states, N + 1])
+        self.lm = np.zeros(N + 1) #lagrange multipliers
 
 #for the lhs, minimum and maximum value of a constraint
 class constraint:
    def __init__(self, n_constraint):
-    self.constraint_lhs = SX.sym('constraint_lhs', n_constraint)
-    self.constraint_rhs_min = SX.sym('constraint_rhs_min', n_constraint)
-    self.constraint_rhs_max = SX.sym('constraint_rhs_max', n_constraint)
+    self.lhs = []
+    self.rhs_min = []
+    self.rhs_max = []
 
 #for all operations related to creating the optimization problem for a player
 class player_strategy:
-    def __init__(self, player_j, n_states, n_controls, N, T, d_min, w_width):
+    def __init__(self, player_j, player_i_prev, n_states, n_controls, N, T, d_min, w_width, blocking_factor):
 
         self.U = SX.sym('U', n_controls, N) #x and y velocities
         self.P = SX.sym('P', n_states, 1) #initial state
         self.X = self.get_X(n_states, N, T)
-        self.theta = SX.sym('theta', N + 1) #arc length parameter corresponding to each state position
+        self.s = SX.sym('s', N + 1) #arc length parameter corresponding to each state position
         self.p_ops = path_operations()
         self.collision_constraint_ = self.collision_constraint(player_j, N, d_min)
         self.wall_constraint_ = self.wall_constraint(w_width)
+        self.objective_ = self.objective(player_j, player_i_prev, blocking_factor)
 
     #state matrix for time 0 to N
     #X[k] = X[k - 1] + T*U[k - 1]
@@ -89,15 +92,6 @@ class player_strategy:
 
         return X
 
-    #iteratively update theta(probably move somewhere else)
-    def update_theta(self, theta, tangent, normal):
-        tangent = self.get_tangent(theta)
-        normal = self.get_normal(theta)
-        tau = self.pos_in_path(theta)
-        den = 1- k*dot(self.X[:, -1] - tau, normal)      
-        theta = dot(tangent/den, self.X[:, -1])  
-        return theta
-
     #||p_i - P_j|| >= d_min
     def collision_constraint(self, player_j, N, d_min):
         cons = constraint(N + 1)
@@ -110,9 +104,9 @@ class player_strategy:
         cons_rhs_min = np.full(N+1, d_min)
         cons_rhs_max = np.full(N+1, np.inf)
 
-        cons.constraint_lhs = cons_lhs
-        cons.constraint_rhs_min = cons_rhs_min
-        cons.constraint_rhs_max = cons_rhs_max
+        cons.lhs = cons_lhs
+        cons.rhs_min = cons_rhs_min
+        cons.rhs_max = cons_rhs_max
 
         return cons
 
@@ -121,29 +115,40 @@ class player_strategy:
         cons = constraint(N + 1)
         cons_lhs = []
         for k in range(N + 1):
-            normal = self.p_ops.get_normal(self.theta[k])
-            tau = self.p_ops.pos_in_path_(self.theta[k])
+            normal = self.p_ops.get_normal(self.s[k])
+            tau = self.p_ops.pos_in_path_(self.s[k])
             cons_lhs.append(dot(normal, self.X[:, k] - tau))
 
         cons_rhs_min = np.full(N+1, -w_width)
         cons_rhs_max = np.full(N+1, w_width)
 
-        cons.constraint_lhs = cons_lhs
-        cons.constraint_rhs_min = cons_rhs_min
-        cons.constraint_rhs_max = cons_rhs_max
+        cons.lhs = cons_lhs
+        cons.rhs_min = cons_rhs_min
+        cons.rhs_max = cons_rhs_max
 
         return cons
 
-    def objective(self, player_j)
-            
+    #function for updating s (sigma = ds/dp)
+    def sigma(self, p, s_, curv):
+        tangent = self.p_ops.get_tangent(s_)
+        normal = self.p_ops.get_normal(s_)
+        tau = self.p_ops.pos_in_path_(s_)
 
+        den = 1 - curv*dot(p - tau, normal)
+        return dot(tangent, p)/den
 
+    def objective(self, player_j, player_i_prev, blocking_factor):   
+        sigma_ = self.sigma(self.X[:, -1], self.s[-1], curv)
+        obj = sigma_
+        if blocking_factor != 0:
+            for k in range(N + 1):
+                rel_pos = player_j.X[:, k] - player_i_prev.X[:, k] 
+                b = rel_pos/np.linalg.norm(rel_pos)
+                obj = obj + player_j.lm[k]*dot(b, self.X[:, k])
+        
+        return obj
 
-
-
-
-    
-
+###################################################################################################################################################################
 
 n_states = 2
 n_controls = 2
@@ -151,12 +156,23 @@ N = 5
 T = 0.2
 v_max = 0.6
 w_width = 5
+d_min = 0.3
+blocking_factor = 0
+init_state_j = [0, 0]
 
 player_i = player(1, n_states, n_controls, N)
+player_i.P = [2, 0]
 player_j = player(2, n_states, n_controls, N)
-player_i_strategy = player_strategy(player_i, n_states, n_controls, N, T)
+player_j.P = [0, 0]
+ps_j = player_strategy(player_j, player_i, n_states, n_controls, N, T, d_min, w_width, blocking_factor)
+ps_j.P = player_j.P
 
-player_i_strategy.wall_constraint(w_width)
+opt_variables = reshape(ps_j.U, 1, 2*N)
+opt_prob = {'f', ps_j.objective, 'x', opt_variables}
 
+#solver = nlpsol('solver', 'ipopt', opt_prob, opts)
+#player_i_strategy = player_strategy(player_i, n_states, n_controls, N, T, d_min, w_width)
+print(vertcat(*ps_j.collision_constraint_.lhs))
+#print(player_i_strategy.objective(player_j, player_i, blocking_factor))
 
 
