@@ -3,6 +3,7 @@ from typing import List
 from scipy.interpolate import CubicSpline
 from scipy.integrate import quad
 from scipy.optimize import bisect
+from numba import jit
 import matplotlib.pyplot as plt
 import math
 import time
@@ -31,7 +32,8 @@ def quadcopter_holonomic_model(
     return P
 
 #TODO: clean up the typing hint for list of coordinates 
-#TODO: following code is very messy to be actually used clean it up 
+#TODO: following code i
+# s very messy to be actually used clean it up 
 def create_splines(
     points: List[List[float]], #contains coords making up centerline
 ):
@@ -54,6 +56,7 @@ def calc_total_arc_length(
 
     return total_arc_length
 
+
 def arc_length_parameterization(
     arc_length: float, #total arc length of the spline curve
     s_i: float, #normalized to 1, arc length 
@@ -71,34 +74,45 @@ def arc_length_parameterization(
     return res_x
 
 #FOR TESTING
-OUT, DERIVATIVE = create_splines([[0,1], [1,1], [2,0], [1.5, -1], [0.75, 0], [0, 0.5], [-0.75, 0], [-1.5, -1], [-2,0], [-1,1], [0,1]])
+points = [[0,1], [1,1], [2,0], [1.5, -1], [0.75, 0], [0, 0.5], [-0.75, 0], [-1.5, -1], [-2,0], [0,1]]
+OUT, DERIVATIVE = create_splines(points)
 length = calc_total_arc_length(DERIVATIVE)
 _ = arc_length_parameterization(length, 0, DERIVATIVE)
 xs = np.linspace(0, 1, 100)
-print(DERIVATIVE(0.5))
-print(length)
-plt.plot(OUT(xs)[:, 0], OUT(xs)[:,1])
-time1 = time.time()
-equi_points = np.linspace(0,1,10)
-x_points = []
-y_points = []
-s_points = []
-for i in equi_points:
-    s = arc_length_parameterization(length, i, DERIVATIVE)
-    s_points.append(s)
-    x_points.append(OUT(s)[0])
-    y_points.append(OUT(s)[1])
-time2 = time.time()
-print(time2-time1)
-print(x_points)
-print(y_points)
-print(s)
+print(type(DERIVATIVE(0.5)))
+# print(length)
+# plt.plot(OUT(xs)[:, 0], OUT(xs)[:,1])
+# time1 = time.time()
+# equi_points = np.linspace(0,1,10)
+# x_points = []
+# y_points = []
+# s_points = []
+# for i in equi_points:
+#     s = arc_length_parameterization(length, i, DERIVATIVE)
+#     s_points.append(s)
+#     x_points.append(OUT(s)[0])
+#     y_points.append(OUT(s)[1])
+# time2 = time.time()
+# print(time2-time1)
+# print(x_points)
+# print(y_points)
+# print(s)
 
-f = lambda x: math.sqrt(DERIVATIVE(x)[0]**2 + DERIVATIVE(x)[1]**2)
-for i in range(9):
-    print(quad(f, s_points[i], s_points[i+1]))
+# f = lambda x: math.sqrt(DERIVATIVE(x)[0]**2 + DERIVATIVE(x)[1]**2)
+# for i in range(9):
+#     print(quad(f, s_points[i], s_points[i+1]))
 
-plt.plot(x_points, y_points, 'ro')
+# plt.plot(x_points, y_points, 'ro')
+
+xgrid = [i[0] for i in points]
+ygrid = [i[1] for i in points]
+V = np.linspace(0,1,len(points))
+lutX = interpolant('LUT', 'bspline',[V],xgrid)
+lutY = interpolant('LUT', 'bspline',[V],ygrid)
+
+plotting = np.linspace(0,1,200)
+print("bleh" , plotting)
+plt.plot([float(lutX(i)) for i in plotting],[float(lutY(i)) for i in plotting],'b-')
 plt.xlim([-3,3])
 plt.ylim([-2,2])
 plt.show()
