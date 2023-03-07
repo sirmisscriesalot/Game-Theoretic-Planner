@@ -1,5 +1,5 @@
 import math
-import casadi as ca
+from casadi import *
 import numpy as np
 from scipy.interpolate import CubicSpline
 
@@ -11,7 +11,7 @@ class gtp:
         self.smp_intv = 0.1
         self.alpha = 0.1
 
-        #following variables are used for internal iterations to solve 16
+        #following variables are used for internal iterations to solve equation 16
         self.P_int_iter = np.zeros((self.N, 2))
         self.mu_int_iter = np.zeros((self.N))
         self.beta_int_iter = np.zeros((self.N, 2))
@@ -35,6 +35,13 @@ class gtp:
         num = self.dcs(s).transpose()
 
         self.sigma = num/den
+
+    def linearized_cost_optimization(self):
+        
+        U = SX.sym('u', self.N, 2)
+        P = SX.sym('p', self.N, 2)
+
+        
 
     
 

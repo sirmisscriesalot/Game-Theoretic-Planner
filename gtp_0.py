@@ -75,11 +75,11 @@ def arc_length_parameterization(
 
 #FOR TESTING
 points = [[0,1], [1,1], [2,0], [1.5, -1], [0.75, 0], [0, 0.5], [-0.75, 0], [-1.5, -1], [-2,0], [0,1]]
-OUT, DERIVATIVE = create_splines(points)
-length = calc_total_arc_length(DERIVATIVE)
-_ = arc_length_parameterization(length, 0, DERIVATIVE)
-xs = np.linspace(0, 1, 100)
-print(type(DERIVATIVE(0.5)))
+# OUT, DERIVATIVE = create_splines(points)
+# length = calc_total_arc_length(DERIVATIVE)
+# _ = arc_length_parameterization(length, 0, DERIVATIVE)
+# xs = np.linspace(0, 1, 100)
+# print(type(DERIVATIVE(0.5)))
 # print(length)
 # plt.plot(OUT(xs)[:, 0], OUT(xs)[:,1])
 # time1 = time.time()
@@ -111,8 +111,9 @@ lutX = interpolant('LUT', 'bspline',[V],xgrid)
 lutY = interpolant('LUT', 'bspline',[V],ygrid)
 
 plotting = np.linspace(0,1,200)
-print("bleh" , plotting)
 plt.plot([float(lutX(i)) for i in plotting],[float(lutY(i)) for i in plotting],'b-')
+rand_point = [2.5, 1.5]
+plt.plot([rand_point[0]],[rand_point[1]], 'ro')
 plt.xlim([-3,3])
 plt.ylim([-2,2])
 plt.show()
