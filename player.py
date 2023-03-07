@@ -8,11 +8,11 @@ n_controls = 2
 n_states = 2
 N = 50
 T = 0.1
-d_min = 2
+d_min = 1
 d_max = 100000
-t_width = 2
-v_max = 20
-M = 10
+t_width = 3
+v_max = 10
+M = 5
 ###########################################################################################################################
 
 #placeholder code for path, taking path as a circle
@@ -113,8 +113,8 @@ class opt_prob:
 
         self.constraints = constraint()
         self.constraints.lhs = self.collision_constraints.lhs + self.wall_constraints.lhs
-        self.constraints.rhs_min = self.collision_constraints.rhs_min + self.wall_constraints.rhs_max
-        self.constraints.rhs_max = self.collision_constraints.rhs_min + self.wall_constraints.rhs_max
+        self.constraints.rhs_min = self.collision_constraints.rhs_min + self.wall_constraints.rhs_min
+        self.constraints.rhs_max = self.collision_constraints.rhs_max + self.wall_constraints.rhs_max
 
         self.objective = self.get_objective(theta_im, theta_il, theta_j)
 
@@ -137,12 +137,11 @@ class opt_prob:
         for k in range(1, N + 1):
             rel_pos = theta_j.X[:, k] - theta_im.X[:, k]
             b = rel_pos/ca.norm_2(rel_pos)
-            print(b)
 
             cons_lhs.append(ca.dot(b, theta_j.X[:, k] - self.X_[:, k]))
 
 
-        cons_rhs_min = [d_min]*N
+        cons_rhs_min = [d_min]*N 
         cons_rhs_max = [d_max]*N 
 
         cons.lhs = cons_lhs
@@ -185,10 +184,9 @@ def get_strategy(theta_il, theta_j, blocking_factor):
     theta_im = theta_il
     for m in range(M):
         opt_prob_i = opt_prob(theta_im, theta_il, theta_j, blocking_factor)
-        prob = {'f': opt_prob_i.objective, 'x': ca.reshape(opt_prob_i.U_, n_controls*N, 1), 'g': ca.vertcat(*opt_prob_i.wall_constraints.lhs)}
+        prob = {'f': opt_prob_i.objective, 'x': ca.reshape(opt_prob_i.U_, n_controls*N, 1), 'g': ca.vertcat(*opt_prob_i.constraints.lhs)}
         solver = ca.nlpsol('solver', 'ipopt', prob)
-        sol = solver(x0 = ca.reshape(opt_prob_i.U0, n_controls*N, 1), lbx = opt_prob_i.U_min, ubx = opt_prob_i.U_max, lbg = opt_prob_i.wall_constraints.rhs_min, ubg = opt_prob_i.wall_constraints.rhs_max)
-
+        sol = solver(x0 = ca.reshape(opt_prob_i.U0, n_controls*N, 1), lbx = opt_prob_i.U_min, ubx = opt_prob_i.U_max, lbg = opt_prob_i.constraints.rhs_min, ubg = opt_prob_i.constraints.rhs_max)
 
         theta_im.U = np.reshape(np.array(sol['x']),(N, n_states)).transpose()
         theta_im.update()
@@ -198,7 +196,7 @@ def get_strategy(theta_il, theta_j, blocking_factor):
 
 
 P_i0 = [20, 0]
-P_j0 = [16.77, 10.89]
+P_j0 = [0, -20]
 track = path(track_)
 blocking_factor = 0
 
@@ -206,14 +204,13 @@ theta_i = theta(P_i0, track)
 theta_j = theta(P_j0, track)
 
 theta_i = get_strategy(theta_i, theta_j, blocking_factor)
-# print(theta_i.normal)
 
-# for k in range(N + 1):
-#     print(np.dot(theta_i.normal[:, k], theta_i.X[:, k] - theta_i.tau[:, k]))
 plt.plot(theta_i.X[0], theta_i.X[1], 'r')
+plt.plot(P_j0[0], P_j0[1], 'go')
 plt.plot(r*np.cos(np.linspace(0,360,360)*np.pi/180), r*np.sin(np.linspace(0,360,360)*np.pi/180), 'b')
 plt.show()
 
 
+        
         
 
