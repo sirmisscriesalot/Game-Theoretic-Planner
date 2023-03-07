@@ -7,9 +7,10 @@ n_controls = 2
 n_states = 2
 N = 5
 T = 0.1
-d_min = 1
+d_min = 0
 d_max = 100000
-t_width = 5
+t_width = 500
+v_max = 4000
 ###########################################################################################################################
 
 #placeholder code for path, taking path as a circle
@@ -73,8 +74,13 @@ class opt_prob:
     def __init__(self, theta_im, theta_il, theta_j, blocking_factor):
 
         self.U_ = SX.sym('U_', n_controls, N) #x and y velocities
+        self.U0 = theta_im.U
+        self.U_min = [-v_max]*n_controls*N
+        self.U_max = [v_max]*n_controls*N
+
         self.P = theta_im.P
         self.X_ = self.get_X_()
+
         self.collision_constraint = self.get_collision_constraint(theta_im, theta_j)
         self.wall_constraint = self.get_wall_constraint(theta_im)
 
@@ -101,15 +107,15 @@ class opt_prob:
     def get_collision_constraint(self, theta_im, theta_j):
         cons = constraint()
         cons_lhs = []
-        for k in range(N + 1):
+        for k in range(1, N + 1):
             rel_pos = theta_im.X[:, k] - theta_j.X[:, k]
             b = rel_pos/norm_2(rel_pos)
 
             cons_lhs.append(dot(b, theta_j.X[:, k] - self.X_[:, k]))
 
 
-        cons_rhs_min = [[d_min]]*(N + 1)
-        cons_rhs_max = [[d_max]]*(N + 1)
+        cons_rhs_min = [d_min]*N
+        cons_rhs_max = [d_max]*N 
 
         cons.lhs = cons_lhs
         cons.rhs_min = cons_rhs_min
@@ -120,11 +126,11 @@ class opt_prob:
     def get_wall_constraint(self, theta_im):
         cons = constraint()
         cons_lhs = []
-        for k in range(N + 1):
+        for k in range(1, N + 1):
             cons_lhs.append(dot(theta_im.normal[:, k], self.X_[:, k] - theta_im.tau[:, k]))
 
-        cons_rhs_min = [[-t_width]]*(N + 1)
-        cons_rhs_max = [[t_width]]*(N + 1)
+        cons_rhs_min = [-t_width]*N 
+        cons_rhs_max = [t_width]*N
 
         cons.lhs = cons_lhs
         cons.rhs_min = cons_rhs_min
@@ -158,8 +164,8 @@ blocking_factor = 0.2
 theta_i = theta(P_i0, track)
 theta_j = theta(P_j0, track)
 
-
 opt_prob_i = opt_prob(theta_i, theta_i, theta_j, blocking_factor)
-prob = {'f': opt_prob_i.objective, 'x': reshape(opt_prob_i.U_, n_controls*N, 1), 'g': opt_prob_i.constraints.lhs}
-print(prob)
+prob = {'f': opt_prob_i.objective, 'x': reshape(opt_prob_i.U_, n_controls*N, 1), 'g': vertcat(*opt_prob_i.constraints.lhs)}
+solver = nlpsol('solver', 'ipopt', prob)
+sol = solver(x0 = reshape(opt_prob_i.U0, n_controls*N, 1), lbx = opt_prob_i.U_min, ubx = opt_prob_i.U_max, lbg = opt_prob_i.constraints.rhs_min, ubg = opt_prob_i.constraints.rhs_max)
 
