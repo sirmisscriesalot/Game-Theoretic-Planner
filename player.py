@@ -6,15 +6,17 @@ import matplotlib.pyplot as plt
 #constant parameters
 n_controls = 2
 n_states = 2
-N = 50
+N = 25
 T = 0.1
-d_min = 1
+d_min = 0.2
 d_max = 100000
 t_width = 3
 v_max = 10
 M = 5
-###########################################################################################################################
+L = 5
 
+
+###########################################################################################################################
 #placeholder code for path, taking path as a circle
 r = 20
 curv = r
@@ -45,7 +47,6 @@ class path:
         return [r*np.cos(theta*np.pi/180), r*np.sin(theta*np.pi/180)]
 
 
-
 #################################################################################################################################
 #for the lhs, minimum and maximum value of a constraint
 class constraint:
@@ -66,7 +67,7 @@ class theta:
             self.X[:, k] = P
 
 
-        self.mu = np.zeros(N + 1) #lagrange multipliers
+        self.mu = np.zeros(N) #lagrange multipliers
         self.S = np.zeros(N + 1)
         self.normal = np.zeros([n_states, N + 1])
         self.tangent = np.zeros([n_states, N + 1])
@@ -99,7 +100,8 @@ class theta:
 
 class opt_prob:
     def __init__(self, theta_im, theta_il, theta_j, blocking_factor):
-
+        
+        self.blocking_factor = blocking_factor
         self.U_ = ca.SX.sym('U_', n_controls, N) #x and y velocities
         self.U0 = theta_im.U
         self.U_min = [-v_max]*n_controls*N
@@ -175,11 +177,13 @@ class opt_prob:
             rel_pos = theta_j.X[:, k] - theta_il.X[:, k]
             b = rel_pos/ca.norm_2(rel_pos)
 
-            if blocking_factor != 0:
-                obj = obj + blocking_factor*theta_j.mu[k]*ca.dot(b, self.X_[:, k])
+            if self.blocking_factor != 0:
+                obj = obj + self.blocking_factor*theta_j.mu[k - 1]*ca.dot(b, self.X_[:, k])
 
-        return obj
+        return -obj
 
+
+###################################################################################################################################################################
 def get_strategy(theta_il, theta_j, blocking_factor):
     theta_im = theta_il
     for m in range(M):
@@ -187,30 +191,53 @@ def get_strategy(theta_il, theta_j, blocking_factor):
         prob = {'f': opt_prob_i.objective, 'x': ca.reshape(opt_prob_i.U_, n_controls*N, 1), 'g': ca.vertcat(*opt_prob_i.constraints.lhs)}
         solver = ca.nlpsol('solver', 'ipopt', prob)
         sol = solver(x0 = ca.reshape(opt_prob_i.U0, n_controls*N, 1), lbx = opt_prob_i.U_min, ubx = opt_prob_i.U_max, lbg = opt_prob_i.constraints.rhs_min, ubg = opt_prob_i.constraints.rhs_max)
+        
 
         theta_im.U = np.reshape(np.array(sol['x']),(N, n_states)).transpose()
         theta_im.update()
 
+    theta_im.mu = np.array(sol['lam_g'])[:N].transpose()[0]
     return theta_im
+
+def iterated_best_response(theta_j0, P_i0, blocking_factor_i, blocking_factor_j):
+    theta_il = theta(P_i0, track)
+    theta_jl = theta_j0
+
+    for l in range(L):
+        theta_il = get_strategy(theta_il, theta_jl, blocking_factor_i)
+
+        theta_jl = get_strategy(theta_jl, theta_il, blocking_factor_j)
+        # print("j", theta_jl.X)
+
+    return theta_il, theta_jl
 
 
 
 P_i0 = [20, 0]
-P_j0 = [0, -20]
+P_j0 = [19, -6]
 track = path(track_)
-blocking_factor = 0
+blocking_factor_i = 0
+blocking_factor_j = 0
 
-theta_i = theta(P_i0, track)
-theta_j = theta(P_j0, track)
+theta_i0 = theta(P_i0, track)
+theta_j0 = theta(P_j0, track)
 
-theta_i = get_strategy(theta_i, theta_j, blocking_factor)
+theta_j0 = get_strategy(theta_j0, theta_i0, 0)
 
+theta_ = iterated_best_response(theta_j0, P_i0, blocking_factor_i, blocking_factor_j)
+theta_i = theta_[0]
+theta_j = theta_[1]
+
+#print(theta_i.X)
+plt.plot(P_i0[0], P_i0[1], 'ro')
 plt.plot(theta_i.X[0], theta_i.X[1], 'r')
+
 plt.plot(P_j0[0], P_j0[1], 'go')
+plt.plot(theta_j.X[0], theta_j.X[1], 'g')
+
 plt.plot(r*np.cos(np.linspace(0,360,360)*np.pi/180), r*np.sin(np.linspace(0,360,360)*np.pi/180), 'b')
 plt.show()
 
 
-        
         
 
