@@ -30,20 +30,26 @@ test_points_2 = np.linspace(0,0.1)
 def find_closest_point(x, y, p):
     opti = Opti()
     t = opti.variable()
-    X = opti.variable(3,1)
-    Y = opti.variable(3,1)
-    P = opti.variable(2,1)
+    X = opti.parameter(4,1)
+    Y = opti.parameter(4,1)
+    P = opti.parameter(2,1)
+
+    opti.subject_to(t<=1)
+    opti.subject_to(t>=0)
 
     opti.set_value(X,x)
     opti.set_value(Y,y)
     opti.set_value(P,p)
 
-    opti.minimize((X(3)*t^3 + X(2)*t^2 + X(1)*t + X(0) - P(0))^2 + (Y(3)*t^3 + Y(2)*t^2 + Y(1)*t + Y(0) - Y(0))^2)
+    opti.minimize((X(3)*t^3 + X(2)*t^2 + X(1)*t + X(0) - P(0))^2 + (Y(3)*t^3 + Y(2)*t^2 + Y(1)*t + Y(0) - P(1))^2)
 
     opti.solver('ipopt')
     sol = opti.solve()
 
-    return sol
+    return sol.value(t)
+
+ans = find_closest_point(np.array([x_1_3, x_1_2, x_1_1, x_1_0]), np.array([y_1_3, y_1_2, y_1_1, y_1_0]), np.array([-0.5,1]))
+print(ans)
 
 
 
