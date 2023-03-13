@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import casadi as ca
@@ -33,19 +34,22 @@ y_1_0 = no_powers[k][1]
 test_points = cs(np.linspace(0,len(control_points)))
 test_points_2 = np.linspace(0 ,1)
 
+t = ca.MX.sym('t')
+P = ca.MX.sym('P', 10) #all the parameters 
+
+Z = ca.blockcat([[P[2]*t**3 + P[3]*t**2 + P[4]*t + P[5]], [P[6]*t**3 + P[7]*t**2 + P[8]*t + P[9]]])
+curve = ca.Function('curve', [t], [Z])
+distance = ca.norm_2(P[:2] - curve(t))
+opts ={}
+opts['ipopt.print_level'] = 0
+#opts['verbose'] = True
+
+nlp = {'x': t, 'f': distance, 'p': P}
+
+solver = ca.nlpsol('solver', 'ipopt', nlp, opts)
+
 def find_closest_point(params):
-    t = ca.MX.sym('t')
-    P = ca.MX.sym('P', 10) #all the parameters 
     
-    Z = ca.blockcat([[P[2]*t**3 + P[3]*t**2 + P[4]*t + P[5]], [P[6]*t**3 + P[7]*t**2 + P[8]*t + P[9]]])
-    curve = ca.Function('curve', [t], [Z])
-    distance = ca.norm_2(P[:2] - curve(t))
-    opts ={}
-    opts['ipopt.print_level'] = 0
-
-    nlp = {'x': t, 'f': distance, 'p': P}
-
-    solver = ca.nlpsol('solver', 'ipopt', nlp, opts)
     sol = solver(x0=0.5, lbx = 0, ubx = 1, p=params)
     t_opt = sol['x']
     t_dis = sol['f']
@@ -79,6 +83,8 @@ e = 0.1
 # circle_points_x = np.flip(circle_points_x)
 # circle_points_y = np.flip(circle_points_y)
 print([[i,j] for i,j in zip(circle_points_x,circle_points_y)])
+
+time1 = time.time()
 
 for i in range(n):
     k = k%(yy-1)
@@ -120,6 +126,26 @@ for i in range(n):
 
     ans2, dist2 = find_closest_point(np.array([circle_points_x[i], circle_points_y[i], x20, x21, x22, x23, y20, y21, y22, y23]))
 
+    # nkkk = (k+3)%(yy-1)
+    # x33 = third_powers[nkk][0]
+    # x32 = second_powers[nkk][0]
+    # x31 = first_powers[nkk][0]
+    # x30 = no_powers[nkk][0]
+
+    # y33 = third_powers[nkk][1]
+    # y32 = second_powers[nkk][1]
+    # y31 = first_powers[nkk][1]
+    # y30 = no_powers[nkk][1]
+
+    # ans3, dist3 = find_closest_point(np.array([circle_points_x[i], circle_points_y[i], x30, x31, x32, x33, y30, y31, y32, y33]))
+
+    # if dist < dist2 and dist3 < dist1 and dist3 < dist0:
+    #     k = nkkk
+    #     t_val = nkkk + ans3
+    #     x = cs(t_val)[0][0][0]
+    #     y = cs(t_val)[0][0][1]
+    #     #plt.plot(np.linspace(x,circle_points_x[i]), np.linspace(y,circle_points_y[i]), 'g--')
+
     if dist2 < dist1 and dist2 < dist0:
         k = nkk
         t_val = nkk + ans2
@@ -138,7 +164,8 @@ for i in range(n):
         y = cs(t_val)[0][0][1]
         plt.plot(np.linspace(x,circle_points_x[i]), np.linspace(y,circle_points_y[i]), 'g--')
 
-    
+time2 = time.time()
+#print(time2-time1)
     
 
 #plt.plot([x_1_0*i**3 + x_1_1*i**2 + x_1_2*i + x_1_3 for i in test_points_2], [y_1_0*i**3 + y_1_1*i**2 + y_1_2*i + y_1_3 for i in test_points_2], 'r--')
