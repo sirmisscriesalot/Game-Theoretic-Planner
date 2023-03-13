@@ -106,13 +106,13 @@ for i in range(n):
         t_val = nk + ans1
         x = cs(t_val)[0][0][0]
         y = cs(t_val)[0][0][1]
-        plt.plot(np.linspace(x,circle_points_x[nk]), np.linspace(y,circle_points_y[nk]), 'g--')
+        plt.plot(np.linspace(x,circle_points_x[i]), np.linspace(y,circle_points_y[i]), 'g--')
     else:
-        t_val = k + ans1
-        plt.plot([x00*i**3 + x01*i**2 + x02*i + x03 for i in test_points_2], [y00*i**3 + y01*i**2 + y02*i + y03 for i in test_points_2], 'g--')
+        t_val = k + ans0
+        #plt.plot([x00*i**3 + x01*i**2 + x02*i + x03 for i in test_points_2], [y00*i**3 + y01*i**2 + y02*i + y03 for i in test_points_2], 'g--')
         x = cs(t_val)[0][0][0]
         y = cs(t_val)[0][0][1]
-        plt.plot(np.linspace(x,circle_points_x[k]), np.linspace(y,circle_points_y[k]), 'g--')
+        plt.plot(np.linspace(x,circle_points_x[i]), np.linspace(y,circle_points_y[i]), 'g--')
     
 
 
