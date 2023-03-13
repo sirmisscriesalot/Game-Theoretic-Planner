@@ -9,8 +9,8 @@ t = np.array(range(len(control_points)))
 t_rad = np.linspace(0, 2*np.pi, 15)
 colors = cm.rainbow(np.linspace(0, 1, 15))
 circle_points = [2.3*np.cos(t_rad), 2.3*np.sin(t_rad)]
-circle_points_x = np.flip(np.roll(circle_points[0], -3))
-circle_points_y = np.flip(np.roll(circle_points[1], -3))
+circle_points_x = np.flip(np.roll(circle_points[0], -4))
+circle_points_y = np.flip(np.roll(circle_points[1], -4))
 cs = CubicSpline(t, control_points, bc_type='periodic')
 coeffs = cs.c
 
@@ -19,7 +19,7 @@ second_powers = coeffs[2]
 first_powers = coeffs[1]
 no_powers = coeffs[0]
 
-k = 0
+k = 4
 x_1_3 = third_powers[k][0]
 x_1_2 = second_powers[k][0]
 x_1_1 = first_powers[k][0]
@@ -40,9 +40,12 @@ def find_closest_point(params):
     Z = ca.blockcat([[P[2]*t**3 + P[3]*t**2 + P[4]*t + P[5]], [P[6]*t**3 + P[7]*t**2 + P[8]*t + P[9]]])
     curve = ca.Function('curve', [t], [Z])
     distance = ca.norm_2(P[:2] - curve(t))
+    opts ={}
+    opts['ipopt.print_level'] = 0
+
     nlp = {'x': t, 'f': distance, 'p': P}
 
-    solver = ca.nlpsol('solver', 'ipopt', nlp)
+    solver = ca.nlpsol('solver', 'ipopt', nlp, opts)
     sol = solver(x0=0.5, lbx = 0, ubx = 1, p=params)
     t_opt = sol['x']
     t_dis = sol['f']
@@ -72,8 +75,11 @@ k = 0
 t_val = 0
 n = len(circle_points_x)
 yy = len(control_points)
+e = 0.1
 # circle_points_x = np.flip(circle_points_x)
 # circle_points_y = np.flip(circle_points_y)
+print([[i,j] for i,j in zip(circle_points_x,circle_points_y)])
+
 for i in range(n):
     k = k%(yy-1)
     x03 = third_powers[k][0]
@@ -101,20 +107,40 @@ for i in range(n):
 
     ans1, dist1 = find_closest_point(np.array([circle_points_x[i], circle_points_y[i], x10, x11, x12, x13, y10, y11, y12, y13]))
 
-    if dist1 < dist0:
+    nkk = (k+2)%(yy-1)
+    x23 = third_powers[nkk][0]
+    x22 = second_powers[nkk][0]
+    x21 = first_powers[nkk][0]
+    x20 = no_powers[nkk][0]
+
+    y23 = third_powers[nkk][1]
+    y22 = second_powers[nkk][1]
+    y21 = first_powers[nkk][1]
+    y20 = no_powers[nkk][1]
+
+    ans2, dist2 = find_closest_point(np.array([circle_points_x[i], circle_points_y[i], x20, x21, x22, x23, y20, y21, y22, y23]))
+
+    if dist2 < dist1 and dist2 < dist0:
+        k = nkk
+        t_val = nkk + ans2
+        x = cs(t_val)[0][0][0]
+        y = cs(t_val)[0][0][1]
+        plt.plot(np.linspace(x,circle_points_x[i]), np.linspace(y,circle_points_y[i]), 'g--')
+    elif dist1 < dist0:
         k = nk
         t_val = nk + ans1
         x = cs(t_val)[0][0][0]
         y = cs(t_val)[0][0][1]
         plt.plot(np.linspace(x,circle_points_x[i]), np.linspace(y,circle_points_y[i]), 'g--')
     else:
-        t_val = k + ans0
-        #plt.plot([x00*i**3 + x01*i**2 + x02*i + x03 for i in test_points_2], [y00*i**3 + y01*i**2 + y02*i + y03 for i in test_points_2], 'g--')
+        t_val = k + ans0 
         x = cs(t_val)[0][0][0]
         y = cs(t_val)[0][0][1]
         plt.plot(np.linspace(x,circle_points_x[i]), np.linspace(y,circle_points_y[i]), 'g--')
+
+    
     
 
-
+#plt.plot([x_1_0*i**3 + x_1_1*i**2 + x_1_2*i + x_1_3 for i in test_points_2], [y_1_0*i**3 + y_1_1*i**2 + y_1_2*i + y_1_3 for i in test_points_2], 'r--')
 
 plt.show()
