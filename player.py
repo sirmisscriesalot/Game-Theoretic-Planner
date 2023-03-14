@@ -30,6 +30,8 @@ class newpath:
         self.t = np.array(range(len(control_pts)))
         self.cs = CubicSpline(self.t, control_points, bc_type='periodic')
         self.coeffs = self.cs.c
+        self.yy = len(control_pts)
+        self.t_val = 0
 
         self.third_powers = self.coeffs[3]
         self.second_powers = self.coeffs[2]
@@ -41,8 +43,70 @@ class newpath:
 
         self.k = 4
 
+    def find_closest_point(c, x0, x1, x2, x3, y0, y1, y2, y3):
+        s = np.linspace(0,1, 100)
+        point = lambda t: (x0*t**3 + x1*t**2 + x2*t + x3, y0*t**3 + y1*t**2 + y2*t + y3)
+        dist = lambda x: (point(x)[0] - c[0])**2 + (point(x)[1] - c[1])**2 
+
+        dist_list = list(map(dist,s))
+
+        index_min = min(range(len(dist_list)), key=dist_list.__getitem__)
+
+        return s[index_min], dist_list[index_min]
+    
+    def update_k(self, pt):
+        self.k = self.k%(self.yy-1)
+        x03 = self.third_powers[self.k][0]
+        x02 = self.second_powers[self.k][0]
+        x01 = self.first_powers[self.k][0]
+        x00 = self.no_powers[self.k][0]
+
+        y03 = self.third_powers[self.k][1]
+        y02 = self.second_powers[self.k][1]
+        y01 = self.first_powers[self.k][1]
+        y00 = self.no_powers[self.k][1]
+
+        ans0, dist0 = self.find_closest_point((pt[0], pt[1]) , x00, x01, x02, x03, y00, y01, y02, y03)
+
+        self.nk = (self.k+1)%(self.yy-1)
+        x13 = self.third_powers[self.nk][0]
+        x12 = self.second_powers[self.nk][0]
+        x11 = self.first_powers[self.nk][0]
+        x10 = self.no_powers[self.nk][0]
+
+        y13 = self.third_powers[self.nk][1]
+        y12 = self.second_powers[self.nk][1]
+        y11 = self.first_powers[self.nk][1]
+        y10 = self.no_powers[self.nk][1]
+
+        ans1, dist1 = self.find_closest_point((pt[0], pt[1]), x10, x11, x12, x13, y10, y11, y12, y13)
+
+        nkk = (self.k+2)%(self.yy-1)
+        x23 = self.third_powers[nkk][0]
+        x22 = self.second_powers[nkk][0]
+        x21 = self.first_powers[nkk][0]
+        x20 = self.no_powers[nkk][0]
+
+        y23 = self.third_powers[nkk][1]
+        y22 = self.second_powers[nkk][1]
+        y21 = self.first_powers[nkk][1]
+        y20 = self.no_powers[nkk][1]
+
+        ans2, dist2 = self.find_closest_point((pt[0], pt[1]), x20, x21, x22, x23, y20, y21, y22, y23)
+
+        if dist2 < dist1 and dist2 < dist0:
+            self.k = self.nkk
+            self.t_val = self.nkk + ans2
+        elif dist1 < dist0:
+            self.k = self.nk
+            self.t_val = self.nk + ans1
+        else:
+            self.t_val = self.k + ans0 
+
+    
     def get_S(self, pt):
-        pass 
+        self.update_k(pt)
+        return self.t_val
 
     def get_T(self, s):
         return self.dcs(s)
