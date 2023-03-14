@@ -33,7 +33,6 @@ y_1_0 = no_powers[k][1]
 
 test_points = cs(np.linspace(0,len(control_points)))
 test_points_2 = np.linspace(0 ,1)
-
 t = ca.MX.sym('t')
 P = ca.MX.sym('P', 10) #all the parameters 
 
@@ -42,6 +41,9 @@ curve = ca.Function('curve', [t], [Z])
 distance = ca.norm_2(P[:2] - curve(t))
 opts ={}
 opts['ipopt.print_level'] = 0
+# opts['jit'] = True
+# curve.print_options()
+# opts['akjdfhasd'] = True
 #opts['verbose'] = True
 
 nlp = {'x': t, 'f': distance, 'p': P}
@@ -53,6 +55,8 @@ def find_closest_point(params):
     sol = solver(x0=0.5, lbx = 0, ubx = 1, p=params)
     t_opt = sol['x']
     t_dis = sol['f']
+
+    print(t_opt)
 
     return t_opt, t_dis
 
@@ -68,7 +72,6 @@ y = y_1_0*ans**3 + y_1_1*ans**2 + y_1_2*ans + y_1_3
 
 # plt.plot(x, y, 'ro')
 # plt.plot([-1.5],[1.5], 'ro')
-# plt.plot(np.linspace(x,-1.5), np.linspace(y,1.5), 'g--')
 plt.gca().set_aspect('equal', adjustable='box')
 plt.plot([i[0] for i in test_points], [i[1] for i in test_points])
 plt.scatter(circle_points_x, circle_points_y, c = colors)
@@ -151,23 +154,23 @@ for i in range(n):
         t_val = nkk + ans2
         x = cs(t_val)[0][0][0]
         y = cs(t_val)[0][0][1]
-        plt.plot(np.linspace(x,circle_points_x[i]), np.linspace(y,circle_points_y[i]), 'g--')
+        #plt.plot(np.linspace(x,circle_points_x[i]), np.linspace(y,circle_points_y[i]), 'g--')
     elif dist1 < dist0:
         k = nk
         t_val = nk + ans1
         x = cs(t_val)[0][0][0]
         y = cs(t_val)[0][0][1]
-        plt.plot(np.linspace(x,circle_points_x[i]), np.linspace(y,circle_points_y[i]), 'g--')
+        #plt.plot(np.linspace(x,circle_points_x[i]), np.linspace(y,circle_points_y[i]), 'g--')
     else:
         t_val = k + ans0 
         x = cs(t_val)[0][0][0]
         y = cs(t_val)[0][0][1]
-        plt.plot(np.linspace(x,circle_points_x[i]), np.linspace(y,circle_points_y[i]), 'g--')
+        #plt.plot(np.linspace(x,circle_points_x[i]), np.linspace(y,circle_points_y[i]), 'g--')
 
 time2 = time.time()
-#print(time2-time1)
+print(time2-time1)
     
 
 #plt.plot([x_1_0*i**3 + x_1_1*i**2 + x_1_2*i + x_1_3 for i in test_points_2], [y_1_0*i**3 + y_1_1*i**2 + y_1_2*i + y_1_3 for i in test_points_2], 'r--')
 
-plt.show()
+#plt.show()
