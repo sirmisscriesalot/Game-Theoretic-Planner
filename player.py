@@ -1,6 +1,8 @@
 import numpy as np
 import casadi as ca
 import matplotlib.pyplot as plt
+import time
+from scipy.interpolate import CubicSpline
 
 ############################################################################################
 #constant parameters
@@ -14,36 +16,109 @@ T_WIDTH = 3
 V_MAX = 10
 M = 5
 L = 5
-BLOCKING_FACTOR_I = 0.7
-BLOCKING_FACTOR_J = 0.1
+BLOCKING_FACTOR_I = 0.8
+BLOCKING_FACTOR_J = 0
 
 ############################################################################################
-#placeholder code for path, taking path as a circle
-R = 20
-CURV = R
-track_ = []
-for theta in range(360):
-    track_.append([R*np.cos(theta*np.pi/180), R*np.sin(theta*np.pi/180)])
+class NewPath:
+    
+    def __init__(self, control_pts):
+        self.t = np.array(range(len(control_pts)))
+        self.cs = CubicSpline(self.t, control_pts, bc_type='periodic')
+        self.coeffs = self.cs.c
+        self.yy = len(control_pts)
+        self.t_val = 0
 
-class Path:
-    def __init__(self, track):
-        self.path_ = track
+        self.third_powers = self.coeffs[3]
+        self.second_powers = self.coeffs[2]
+        self.first_powers = self.coeffs[1]
+        self.no_powers = self.coeffs[0]
 
+        self.dcs = self.cs.derivative(1)
+        self.ddcs = self.cs.derivative(2)
+
+        self.k = 2
+        self.nk = self.k
+        self.nkk = self.k
+
+    def find_closest_point(self, c, x0, x1, x2, x3, y0, y1, y2, y3):
+        s = np.linspace(0,1, 100)
+        point = lambda t: (x0*t**3 + x1*t**2 + x2*t + x3, y0*t**3 + y1*t**2 + y2*t + y3)
+        dist = lambda x: (point(x)[0] - c[0])**2 + (point(x)[1] - c[1])**2 
+
+        dist_list = list(map(dist,s))
+
+        index_min = min(range(len(dist_list)), key=dist_list.__getitem__)
+
+        return s[index_min], dist_list[index_min]
+    
+    def update_k(self, pt):
+        self.k = self.k%(self.yy-1)
+        x03 = self.third_powers[self.k][0]
+        x02 = self.second_powers[self.k][0]
+        x01 = self.first_powers[self.k][0]
+        x00 = self.no_powers[self.k][0]
+
+        y03 = self.third_powers[self.k][1]
+        y02 = self.second_powers[self.k][1]
+        y01 = self.first_powers[self.k][1]
+        y00 = self.no_powers[self.k][1]
+
+        ans0, dist0 = self.find_closest_point((pt[0], pt[1]) , x00, x01, x02, x03, y00, y01, y02, y03)
+
+        self.nk = (self.k+1)%(self.yy-1)
+        x13 = self.third_powers[self.nk][0]
+        x12 = self.second_powers[self.nk][0]
+        x11 = self.first_powers[self.nk][0]
+        x10 = self.no_powers[self.nk][0]
+
+        y13 = self.third_powers[self.nk][1]
+        y12 = self.second_powers[self.nk][1]
+        y11 = self.first_powers[self.nk][1]
+        y10 = self.no_powers[self.nk][1]
+
+        ans1, dist1 = self.find_closest_point((pt[0], pt[1]), x10, x11, x12, x13, y10, y11, y12, y13)
+
+        nkk = (self.k+2)%(self.yy-1)
+        x23 = self.third_powers[nkk][0]
+        x22 = self.second_powers[nkk][0]
+        x21 = self.first_powers[nkk][0]
+        x20 = self.no_powers[nkk][0]
+
+        y23 = self.third_powers[nkk][1]
+        y22 = self.second_powers[nkk][1]
+        y21 = self.first_powers[nkk][1]
+        y20 = self.no_powers[nkk][1]
+
+        ans2, dist2 = self.find_closest_point((pt[0], pt[1]), x20, x21, x22, x23, y20, y21, y22, y23)
+
+        if dist2 < dist1 and dist2 < dist0:
+            self.k = self.nkk
+            self.t_val = self.nkk + ans2
+        elif dist1 < dist0:
+            self.k = self.nk
+            self.t_val = self.nk + ans1
+        else:
+            self.t_val = self.k + ans0 
+
+    
     def get_s(self, pt):
-        dist = []
-        for path_pt in self.path_:
-            dist.append((path_pt[0] - pt[0])**2 + (path_pt[1] - pt[1])**2)
-        dist = np.array(dist)
-        return dist.argmin()
-        
-    def get_t(self, theta):
-        return [-1*np.sin(theta*np.pi/180), np.cos(theta*np.pi/180)]
+        self.update_k(pt)
+        return self.t_val
 
-    def get_n(self, theta):
-        return [-np.cos(theta*np.pi/180), -np.sin(theta*np.pi/180)]
-
-    def get_tau(self, theta):
-        return [R*np.cos(theta*np.pi/180), R*np.sin(theta*np.pi/180)]
+    def get_t(self):
+        tangent = self.dcs(self.t_val)
+        return tangent/np.linalg.norm(tangent)
+    
+    def get_n(self):
+        normal =  self.ddcs(self.t_val)
+        return normal/np.linalg.norm(normal)
+    
+    def get_curv(self):
+        return np.linalg.norm(self.ddcs(self.t_val))
+    
+    def get_tau(self):
+        return self.cs(self.t_val)
 
 
 ##############################################################################################
@@ -71,14 +146,18 @@ class Theta:
         self.normal = np.zeros([N_STATES, N + 1])
         self.tangent = np.zeros([N_STATES, N + 1])
         self.tau = np.zeros([N_STATES, N + 1])
+        self.last_curv = 0
 
         for k in range(N + 1):
             S_ = self.racetrack.get_s(self.X[:, k])
             self.S[k] = S_
 
-            self.normal[:, k] = self.racetrack.get_n(S_)
-            self.tangent[:, k] = self.racetrack.get_t(S_)
-            self.tau[:, k] = self.racetrack.get_tau(S_)
+            self.normal[:, k] = self.racetrack.get_n()
+            self.tangent[:, k] = self.racetrack.get_t()
+            self.tau[:, k] = self.racetrack.get_tau()
+
+        self.racetrack.get_s(self.X[:, N])
+        self.last_curv = self.racetrack.get_curv()
 
     def update(self):
         for k in range(N):
@@ -91,9 +170,13 @@ class Theta:
             S_ = self.racetrack.get_s(self.X[:, k])
             self.S[k] = self.racetrack.get_s(self.X[:, k])
 
-            self.normal[:, k] = self.racetrack.get_n(S_)
-            self.tangent[:, k] = self.racetrack.get_t(S_)
-            self.tau[:, k] = self.racetrack.get_tau(S_)
+            self.normal[:, k] = self.racetrack.get_n()
+            self.tangent[:, k] = self.racetrack.get_t()
+            self.tau[:, k] = self.racetrack.get_tau()
+
+        self.racetrack.get_s(self.X[:, N])
+        self.last_curv = self.racetrack.get_curv()
+        
        
 class OptProb:
     def __init__(self, theta_im, theta_il, theta_j, blocking_factor):        
@@ -167,7 +250,7 @@ class OptProb:
 
     def get_objective(self, theta_im, theta_il, theta_j):
         sigma_num = theta_im.tangent[:, N]
-        simga_den = 1 - CURV*ca.dot(theta_im.X[:, N] - theta_im.tau[:, N], theta_im.normal[:, N])
+        simga_den = 1 - theta_im.last_curv*ca.dot(theta_im.X[:, N] - theta_im.tau[:, N], theta_im.normal[:, N])
         sigma = sigma_num/simga_den
         obj = ca.dot(sigma, self.X_[:, N])
 
@@ -188,7 +271,11 @@ def get_strategy(theta_il, theta_j, blocking_factor):
         opt_prob_i = OptProb(theta_im, theta_il, theta_j, blocking_factor)
         prob = {'f': opt_prob_i.objective, 'x': ca.reshape(opt_prob_i.U_, N_CONTROLS*N, 1),
                 'g': ca.vertcat(*opt_prob_i.constraints.lhs)}
-        solver = ca.nlpsol('solver', 'ipopt', prob)
+        
+        opts = {}
+        opts['ipopt.print_level'] = 0
+        solver = ca.nlpsol('solver', 'ipopt', prob, opts)
+
         sol = solver(x0 = ca.reshape(opt_prob_i.U0, N_CONTROLS*N, 1),
                      lbx = opt_prob_i.U_min, ubx = opt_prob_i.U_max,
                      lbg = opt_prob_i.constraints.rhs_min, ubg = opt_prob_i.constraints.rhs_max)
@@ -212,10 +299,15 @@ def iterated_best_response(theta_j0, P_i0, blocking_factor_i, blocking_factor_j)
     return theta_il, theta_jl
 
 
+time1 = time.time()
 
-P_i0 = [20, 0]
-P_j0 = [19, -6]
-track = Path(track_)
+control_points = [[0, 20], [20, 20], [20,0], [30, -20], [15, 0], [0, 10], [-15, 0], [-30, -20], [-40, 0], [0, 20]]
+t = np.array(range(len(control_points)))
+cs = CubicSpline(t, control_points, bc_type='periodic')
+
+P_i0 = [0, 20]
+P_j0 = [20, 0]
+track = NewPath(control_points)
 
 theta_i0 = Theta(P_i0, track)
 theta_j0 = Theta(P_j0, track)
@@ -226,19 +318,22 @@ theta_ = iterated_best_response(theta_j0, P_i0, BLOCKING_FACTOR_I, BLOCKING_FACT
 theta_i = theta_[0]
 theta_j = theta_[1]
 
+time2 = time.time()
+print(time2 - time1)
+
 #print(theta_i.X)
 plt.gca().set_aspect('equal', adjustable='box')
-plt.plot(P_i0[0], P_i0[1], 'ro')
-plt.plot(theta_i.X[0], theta_i.X[1], 'r')
+#plt.plot(P_i0[0], P_i0[1], 'ro')
+#plt.plot(theta_i.X[0], theta_i.X[1], 'r')
 
-plt.plot(P_j0[0], P_j0[1], 'go')
-plt.plot(theta_j.X[0], theta_j.X[1], 'g')
+#plt.plot(P_j0[0], P_j0[1], 'go')
+#plt.plot(theta_j.X[0], theta_j.X[1], 'g')
 
-plt.plot(R*np.cos(np.linspace(0,360,360)*np.pi/180), R*np.sin(np.linspace(0,360,360)*np.pi/180), 'b')
-plt.plot((R + T_WIDTH)*np.cos(np.linspace(0,360,360)*np.pi/180), (R + T_WIDTH)*np.sin(np.linspace(0,360,360)*np.pi/180), 'b', '--')
-plt.plot((R - T_WIDTH)*np.cos(np.linspace(0,360,360)*np.pi/180), (R - T_WIDTH)*np.sin(np.linspace(0,360,360)*np.pi/180), 'b', '--')
+# plt.plot(R*np.cos(np.linspace(0,360,360)*np.pi/180), R*np.sin(np.linspace(0,360,360)*np.pi/180), 'b')
+# plt.plot((R + T_WIDTH)*np.cos(np.linspace(0,360,360)*np.pi/180), (R + T_WIDTH)*np.sin(np.linspace(0,360,360)*np.pi/180), 'b', '--')
+# plt.plot((R - T_WIDTH)*np.cos(np.linspace(0,360,360)*np.pi/180), (R - T_WIDTH)*np.sin(np.linspace(0,360,360)*np.pi/180), 'b', '--')
 
+test_points = cs(np.linspace(0,len(control_points)))
+plt.plot([i[0] for i in test_points], [i[1] for i in test_points])
 plt.show()
-
-        
 
