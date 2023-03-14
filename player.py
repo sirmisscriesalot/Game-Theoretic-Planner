@@ -41,9 +41,9 @@ class newpath:
         self.dcs = self.cs.derivative(1)
         self.ddcs = self.cs.derivative(2)
 
-        self.k = 4
+        self.k = 2
 
-    def find_closest_point(c, x0, x1, x2, x3, y0, y1, y2, y3):
+    def find_closest_point(self, c, x0, x1, x2, x3, y0, y1, y2, y3):
         s = np.linspace(0,1, 100)
         point = lambda t: (x0*t**3 + x1*t**2 + x2*t + x3, y0*t**3 + y1*t**2 + y2*t + y3)
         dist = lambda x: (point(x)[0] - c[0])**2 + (point(x)[1] - c[1])**2 
